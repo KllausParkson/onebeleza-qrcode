@@ -19,8 +19,8 @@ const schema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   slug: z.string().min(1, "Slug é obrigatório").regex(/^[a-z0-9-]+$/, "Use apenas letras, números e hífens"),
   welcome: z.object({
-    color_primary: z.string().default("#22c55e"),
-    color_secondary: z.string().default("#f0fdf4"),
+    color_primary: z.string(),
+    color_secondary: z.string(),
     logo_url: z.string().optional(),
     welcome_image_url: z.string().optional(),
     title: z.string().optional(),

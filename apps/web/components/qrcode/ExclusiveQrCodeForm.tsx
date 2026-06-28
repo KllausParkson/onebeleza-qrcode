@@ -25,8 +25,8 @@ const schema = z.object({
     title: z.string().optional(),
     description: z.string().max(250).optional(),
     website: z.string().optional(),
-    color_primary: z.string().default("#1a1a1a"),
-    color_secondary: z.string().default("#ffffff"),
+    color_primary: z.string(),
+    color_secondary: z.string(),
     welcome_image_url: z.string().optional(),
   }),
   app_store_links: z.array(z.object({
@@ -36,7 +36,7 @@ const schema = z.object({
   custom_buttons: z.array(z.object({
     label: z.string().min(1),
     url: z.string().url(),
-    order: z.number().default(0),
+    order: z.number().int(),
   })).optional(),
 });
 
