@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import type { QrCode, AppStoreLink } from "@onebeleza/shared";
 import { getWelcomeScreen } from "@/lib/qrcode-form";
+import { welcomeGradient, isColorDark } from "@/lib/welcome-theme";
+import StoreBadgeLink from "@/components/qrcode/StoreBadgeLink";
 import { Share2 } from "lucide-react";
 
 interface Props {
@@ -16,25 +18,7 @@ function detectPlatform(): "ios" | "android" | "unknown" {
   return "unknown";
 }
 
-const STORE_CONFIG: Record<string, { label: string; icon: string; bg: string }> = {
-  ios: {
-    label: "Download on the App Store",
-    icon: "🍎",
-    bg: "#000000",
-  },
-  android: {
-    label: "Get it on Google Play",
-    icon: "▶",
-    bg: "#000000",
-  },
-  amazon: {
-    label: "Available at Amazon Appstore",
-    icon: "a",
-    bg: "#FF9900",
-  },
-};
-
-const SPLASH_DURATION_MS = 5000;
+const SPLASH_DURATION_MS = 3000;
 const SPLASH_FADE_MS = 400;
 
 export default function WelcomeScreen({ qrCode }: Props) {
@@ -63,18 +47,19 @@ export default function WelcomeScreen({ qrCode }: Props) {
       clearTimeout(hideTimer);
     };
   }, [splashImageUrl]);
-  const links = qrCode.app_store_links ?? [];
 
+  const links = qrCode.app_store_links ?? [];
   const primaryColor = ws?.color_primary ?? "#22c55e";
   const secondaryColor = ws?.color_secondary ?? "#ffffff";
   const displayName = ws?.app_name ?? qrCode.name;
+  const gradient = welcomeGradient(primaryColor, secondaryColor);
+  const mobileLightText = isColorDark(primaryColor);
 
-  // Splash screen — logo se aproxima por 5s antes da tela principal
   if (showSplash && splashImageUrl) {
     return (
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center ${splashExiting ? "welcome-splash-exit" : ""}`}
-        style={{ backgroundColor: primaryColor }}
+        style={{ background: gradient }}
       >
         <img
           src={splashImageUrl}
@@ -85,7 +70,6 @@ export default function WelcomeScreen({ qrCode }: Props) {
     );
   }
 
-  // Ordena links: plataforma detectada primeiro
   const sortedLinks: AppStoreLink[] = [
     ...links.filter((l) => l.platform === platform),
     ...links.filter((l) => l.platform !== platform),
@@ -103,26 +87,47 @@ export default function WelcomeScreen({ qrCode }: Props) {
     }
   }
 
-  return (
-    <div
-      className="min-h-screen flex flex-col welcome-main-enter"
-      style={{ backgroundColor: secondaryColor }}
-    >
-      {/* Faixa superior com cor primária (como no preview do admin) */}
-      <div className="h-3 w-full shrink-0" style={{ backgroundColor: primaryColor }} />
+  const titleClass = mobileLightText
+    ? "md:text-gray-900 text-white"
+    : "text-gray-900";
+  const mutedClass = mobileLightText
+    ? "md:text-gray-500 text-white/80"
+    : "text-gray-500";
+  const shareBtnClass = mobileLightText
+    ? "border-white/30 text-white hover:bg-white/10 md:border-black/10 md:text-gray-600 md:hover:bg-black/5"
+    : "border-black/10 text-gray-600 hover:bg-black/5";
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 relative">
-        {/* Share button */}
+  return (
+    <div className="min-h-screen welcome-main-enter relative bg-white">
+      {/* Mobile: gradiente ocupa a tela inteira */}
+      <div
+        className="absolute inset-0 md:hidden"
+        style={{ background: gradient }}
+        aria-hidden
+      />
+
+      {/* Tablet/desktop: gradiente só no topo */}
+      <div
+        className="hidden md:block absolute top-0 inset-x-0 h-[min(360px,40vh)]"
+        style={{ background: gradient }}
+        aria-hidden
+      />
+
+      {/* Nome no header (desktop) */}
+      <div className="hidden md:block relative z-10 pt-10 text-center">
+        <p className="text-sm font-medium text-white drop-shadow-sm">{displayName}</p>
+      </div>
+
+      <div className="relative z-10 flex flex-col items-center min-h-screen md:min-h-0 px-6 py-10 md:py-0 md:pb-16">
         <button
           onClick={handleShare}
-          className="absolute top-4 right-4 w-9 h-9 rounded-full border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors"
+          className={`absolute top-4 right-4 z-20 w-9 h-9 rounded-full border flex items-center justify-center transition-colors ${shareBtnClass} md:top-[calc(min(360px,40vh)-2.5rem)] md:bg-white md:shadow-md`}
           aria-label="Compartilhar"
         >
-          <Share2 className="w-4 h-4 text-gray-600" />
+          <Share2 className="w-4 h-4" />
         </button>
 
-        <div className="w-full max-w-sm flex flex-col items-center text-center gap-4">
-          {/* Logo */}
+        <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm md:flex-none md:mt-4 md:bg-white md:rounded-2xl md:shadow-[0_8px_30px_rgb(0,0,0,0.12)] md:p-8 md:border md:border-gray-100">
           {ws?.logo_url ? (
             <img
               src={ws.logo_url}
@@ -138,48 +143,31 @@ export default function WelcomeScreen({ qrCode }: Props) {
             </div>
           )}
 
-          {/* App name & developer (exclusivo) */}
           {ws?.app_name && (
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">{ws.app_name}</h1>
-              {ws.developer && <p className="text-sm text-gray-500">{ws.developer}</p>}
+            <div className="mt-4">
+              <h1 className={`text-lg font-bold ${titleClass}`}>{ws.app_name}</h1>
+              {ws.developer && <p className={`text-sm ${mutedClass}`}>{ws.developer}</p>}
             </div>
           )}
 
-          {/* Title (base e exclusivo) */}
           {ws?.title && (
-            <p className="text-xl font-bold text-gray-900 leading-snug">{ws.title}</p>
+            <p className={`text-xl font-bold leading-snug mt-4 ${titleClass}`}>{ws.title}</p>
           )}
 
-          {/* Description */}
           {ws?.description && (
-            <p className="text-sm text-gray-500 leading-relaxed">{ws.description}</p>
+            <p className={`text-sm leading-relaxed mt-2 ${mutedClass}`}>{ws.description}</p>
           )}
 
-          {/* Store buttons */}
           {sortedLinks.length > 0 && (
-            <div className="w-full space-y-2 mt-2">
-              {sortedLinks.map((link) => {
-                const config = STORE_CONFIG[link.platform];
-                if (!config) return null;
-                return (
-                  <a
-                    key={link.platform}
-                    href={link.url}
-                    className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: config.bg }}
-                  >
-                    <span className="text-base">{config.icon}</span>
-                    {config.label}
-                  </a>
-                );
-              })}
+            <div className="w-full space-y-2.5 mt-6">
+              {sortedLinks.map((link) => (
+                <StoreBadgeLink key={link.platform} platform={link.platform} url={link.url} />
+              ))}
             </div>
           )}
 
-          {/* Custom buttons */}
           {qrCode.custom_buttons && qrCode.custom_buttons.length > 0 && (
-            <div className="w-full space-y-2">
+            <div className="w-full space-y-2 mt-4">
               {qrCode.custom_buttons
                 .sort((a, b) => a.order - b.order)
                 .map((btn) => (
@@ -195,13 +183,12 @@ export default function WelcomeScreen({ qrCode }: Props) {
             </div>
           )}
 
-          {/* Website */}
           {ws?.website && (
             <a
               href={ws.website.startsWith("http") ? ws.website : `https://${ws.website}`}
               target="_blank"
               rel="noreferrer"
-              className="text-xs underline"
+              className="text-xs underline mt-4"
               style={{ color: primaryColor }}
             >
               {ws.website}
