@@ -15,11 +15,21 @@ export type Variables = {
 
 const app = new Hono<{ Variables: Variables }>();
 
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:3000"],
+    origin: (origin) => {
+      if (!origin) return allowedOrigins[0] ?? "http://localhost:3000";
+      return allowedOrigins.includes(origin) ? origin : null;
+    },
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
@@ -29,8 +39,11 @@ app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOStri
 // Rotas públicas (sem auth)
 app.route("/public", publicRouter);
 
-// Rotas autenticadas
-app.use("/api/*", authMiddleware);
+// Rotas autenticadas (OPTIONS passa direto para o CORS)
+app.use("/api/*", async (c, next) => {
+  if (c.req.method === "OPTIONS") return next();
+  return authMiddleware(c, next);
+});
 app.route("/api/qrcodes", qrcodesRouter);
 app.route("/api/folders", foldersRouter);
 app.route("/api/upload", uploadRouter);
