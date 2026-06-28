@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { supabase } from "../lib/supabase.js";
+import { normalizeQrCode } from "../lib/normalize-qrcode.js";
 
 const app = new Hono();
 
@@ -30,7 +31,7 @@ app.get("/:slug", async (c) => {
       supabase.rpc("increment_scan_count", { qr_code_id_input: data.id })
     );
 
-  return c.json(data);
+  return c.json(normalizeQrCode(data));
 });
 
 export default app;

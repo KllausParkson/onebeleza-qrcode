@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { QrCode } from "@onebeleza/shared";
-import { mapBaseQrToForm, mapExclusiveQrToForm } from "@/lib/qrcode-form";
+import { mapBaseQrToForm, mapExclusiveQrToForm, normalizeQrCode } from "@/lib/qrcode-form";
 import BaseQrCodeForm from "@/components/qrcode/BaseQrCodeForm";
 import ExclusiveQrCodeForm from "@/components/qrcode/ExclusiveQrCodeForm";
 
@@ -24,7 +24,7 @@ export default function EditQrCodeClient({ token, id }: Props) {
       setError("");
       try {
         const data = await api.qrcodes.get(token, id);
-        setQr(data);
+        setQr(normalizeQrCode(data));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao carregar QR Code");
       } finally {

@@ -16,6 +16,13 @@ export function getWelcomeScreen(qr: QrCodeRaw): WelcomeScreen | undefined {
   return ws;
 }
 
+/** Normaliza resposta da API (welcome_screens → welcome_screen) */
+export function normalizeQrCode(qr: QrCodeRaw): QrCode {
+  const welcome_screen = getWelcomeScreen(qr);
+  const { welcome_screens: _removed, ...rest } = qr;
+  return { ...rest, welcome_screen } as QrCode;
+}
+
 export function mapBaseQrToForm(qr: QrCodeRaw): CreateBaseQrCodePayload {
   const ws = getWelcomeScreen(qr);
   return {

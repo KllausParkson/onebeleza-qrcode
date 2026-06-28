@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { supabase } from "../lib/supabase.js";
 import { isSlugAvailable } from "../lib/slug.js";
+import { normalizeQrCode } from "../lib/normalize-qrcode.js";
 import { generateQRCodeDataURL } from "../lib/qrcode.js";
 import { ONE_BELEZA_LINKS } from "@onebeleza/shared";
 import type { Variables } from "../index.js";
@@ -78,7 +79,7 @@ app.get("/", async (c) => {
   const { data, error, count } = await query;
   if (error) return c.json({ error: error.message }, 500);
 
-  return c.json({ data, total: count });
+  return c.json({ data: (data ?? []).map(normalizeQrCode), total: count });
 });
 
 /** GET /qrcodes/slug/check?slug=...&excludeId=... */
@@ -109,7 +110,7 @@ app.get("/:id", async (c) => {
     .single();
 
   if (error) return c.json({ error: "Not found" }, 404);
-  return c.json(data);
+  return c.json(normalizeQrCode(data));
 });
 
 /** POST /qrcodes/base — cria APP Base */
@@ -243,7 +244,7 @@ app.put("/:id", async (c) => {
     .eq("id", id)
     .single();
 
-  return c.json(updated ?? qr);
+  return c.json(updated ? normalizeQrCode(updated) : qr);
 });
 
 /** DELETE /qrcodes/:id */

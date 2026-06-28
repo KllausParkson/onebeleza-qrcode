@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { QrCode, AppStoreLink } from "@onebeleza/shared";
+import { getWelcomeScreen } from "@/lib/qrcode-form";
 import { Share2 } from "lucide-react";
 
 interface Props {
@@ -43,11 +44,12 @@ export default function WelcomeScreen({ qrCode }: Props) {
     return () => clearTimeout(timer);
   }, []);
 
-  const ws = qrCode.welcome_screen;
+  const ws = getWelcomeScreen(qrCode);
   const links = qrCode.app_store_links ?? [];
 
   const primaryColor = ws?.color_primary ?? "#22c55e";
   const secondaryColor = ws?.color_secondary ?? "#ffffff";
+  const displayName = ws?.app_name ?? qrCode.name;
 
   // Splash screen
   if (showSplash && ws?.welcome_image_url) {
@@ -74,7 +76,7 @@ export default function WelcomeScreen({ qrCode }: Props) {
   async function handleShare() {
     try {
       await navigator.share({
-        title: ws?.app_name ?? qrCode.name,
+        title: displayName,
         text: ws?.description ?? "",
         url: window.location.href,
       });
@@ -85,104 +87,109 @@ export default function WelcomeScreen({ qrCode }: Props) {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-6 py-8 relative"
+      className="min-h-screen flex flex-col"
       style={{ backgroundColor: secondaryColor }}
     >
-      {/* Share button */}
-      <button
-        onClick={handleShare}
-        className="absolute top-4 right-4 w-9 h-9 rounded-full border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors"
-        aria-label="Compartilhar"
-      >
-        <Share2 className="w-4 h-4 text-gray-600" />
-      </button>
+      {/* Faixa superior com cor primária (como no preview do admin) */}
+      <div className="h-3 w-full shrink-0" style={{ backgroundColor: primaryColor }} />
 
-      <div className="w-full max-w-sm flex flex-col items-center text-center gap-4">
-        {/* Logo */}
-        {ws?.logo_url ? (
-          <img
-            src={ws.logo_url}
-            alt={ws.app_name ?? "logo"}
-            className="w-24 h-24 rounded-3xl object-cover border border-black/10"
-          />
-        ) : (
-          <div
-            className="w-24 h-24 rounded-3xl flex items-center justify-center text-white text-3xl font-bold"
-            style={{ backgroundColor: primaryColor }}
-          >
-            {(ws?.app_name ?? qrCode.name).charAt(0).toUpperCase()}
-          </div>
-        )}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 relative">
+        {/* Share button */}
+        <button
+          onClick={handleShare}
+          className="absolute top-4 right-4 w-9 h-9 rounded-full border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors"
+          aria-label="Compartilhar"
+        >
+          <Share2 className="w-4 h-4 text-gray-600" />
+        </button>
 
-        {/* App name & developer */}
-        {ws?.app_name && (
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">{ws.app_name}</h1>
-            {ws.developer && <p className="text-sm text-gray-500">{ws.developer}</p>}
-          </div>
-        )}
+        <div className="w-full max-w-sm flex flex-col items-center text-center gap-4">
+          {/* Logo */}
+          {ws?.logo_url ? (
+            <img
+              src={ws.logo_url}
+              alt={displayName}
+              className="w-24 h-24 rounded-3xl object-cover border border-black/10"
+            />
+          ) : (
+            <div
+              className="w-24 h-24 rounded-3xl flex items-center justify-center text-white text-3xl font-bold"
+              style={{ backgroundColor: primaryColor }}
+            >
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+          )}
 
-        {/* Title */}
-        {ws?.title && (
-          <p className="text-xl font-bold text-gray-900 leading-snug">{ws.title}</p>
-        )}
+          {/* App name & developer (exclusivo) */}
+          {ws?.app_name && (
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">{ws.app_name}</h1>
+              {ws.developer && <p className="text-sm text-gray-500">{ws.developer}</p>}
+            </div>
+          )}
 
-        {/* Description */}
-        {ws?.description && (
-          <p className="text-sm text-gray-500 leading-relaxed">{ws.description}</p>
-        )}
+          {/* Title (base e exclusivo) */}
+          {ws?.title && (
+            <p className="text-xl font-bold text-gray-900 leading-snug">{ws.title}</p>
+          )}
 
-        {/* Store buttons */}
-        {sortedLinks.length > 0 && (
-          <div className="w-full space-y-2 mt-2">
-            {sortedLinks.map((link) => {
-              const config = STORE_CONFIG[link.platform];
-              if (!config) return null;
-              return (
-                <a
-                  key={link.platform}
-                  href={link.url}
-                  className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
-                  style={{ backgroundColor: config.bg }}
-                >
-                  <span className="text-base">{config.icon}</span>
-                  {config.label}
-                </a>
-              );
-            })}
-          </div>
-        )}
+          {/* Description */}
+          {ws?.description && (
+            <p className="text-sm text-gray-500 leading-relaxed">{ws.description}</p>
+          )}
 
-        {/* Custom buttons */}
-        {qrCode.custom_buttons && qrCode.custom_buttons.length > 0 && (
-          <div className="w-full space-y-2">
-            {qrCode.custom_buttons
-              .sort((a, b) => a.order - b.order)
-              .map((btn) => (
-                <a
-                  key={btn.id}
-                  href={btn.url}
-                  className="flex items-center justify-center w-full py-2.5 px-4 rounded-xl border text-sm font-medium transition-colors hover:opacity-80"
-                  style={{ borderColor: primaryColor, color: primaryColor }}
-                >
-                  {btn.label}
-                </a>
-              ))}
-          </div>
-        )}
+          {/* Store buttons */}
+          {sortedLinks.length > 0 && (
+            <div className="w-full space-y-2 mt-2">
+              {sortedLinks.map((link) => {
+                const config = STORE_CONFIG[link.platform];
+                if (!config) return null;
+                return (
+                  <a
+                    key={link.platform}
+                    href={link.url}
+                    className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: config.bg }}
+                  >
+                    <span className="text-base">{config.icon}</span>
+                    {config.label}
+                  </a>
+                );
+              })}
+            </div>
+          )}
 
-        {/* Website */}
-        {ws?.website && (
-          <a
-            href={ws.website.startsWith("http") ? ws.website : `https://${ws.website}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs underline"
-            style={{ color: primaryColor }}
-          >
-            {ws.website}
-          </a>
-        )}
+          {/* Custom buttons */}
+          {qrCode.custom_buttons && qrCode.custom_buttons.length > 0 && (
+            <div className="w-full space-y-2">
+              {qrCode.custom_buttons
+                .sort((a, b) => a.order - b.order)
+                .map((btn) => (
+                  <a
+                    key={btn.id}
+                    href={btn.url}
+                    className="flex items-center justify-center w-full py-2.5 px-4 rounded-xl border text-sm font-medium transition-colors hover:opacity-80"
+                    style={{ borderColor: primaryColor, color: primaryColor }}
+                  >
+                    {btn.label}
+                  </a>
+                ))}
+            </div>
+          )}
+
+          {/* Website */}
+          {ws?.website && (
+            <a
+              href={ws.website.startsWith("http") ? ws.website : `https://${ws.website}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs underline"
+              style={{ color: primaryColor }}
+            >
+              {ws.website}
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );

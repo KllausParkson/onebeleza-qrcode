@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import type { QrCode } from "@onebeleza/shared";
 import WelcomeScreen from "@/components/qrcode/WelcomeScreen";
+import { getWelcomeScreen, normalizeQrCode } from "@/lib/qrcode-form";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
@@ -13,7 +14,8 @@ async function getQrCode(slug: string): Promise<QrCode | null> {
       next: { revalidate: 60 },
     });
     if (!res.ok) return null;
-    return res.json();
+    const raw = (await res.json()) as QrCode;
+    return normalizeQrCode(raw);
   } catch {
     return null;
   }
@@ -28,7 +30,7 @@ export async function generateMetadata({
   const qr = await getQrCode(slug);
   if (!qr) return { title: "Não encontrado" };
 
-  const ws = qr.welcome_screen;
+  const ws = getWelcomeScreen(qr);
   return {
     title: ws?.app_name ?? qr.name,
     description: ws?.description ?? undefined,
