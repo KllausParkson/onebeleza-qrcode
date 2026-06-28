@@ -34,34 +34,52 @@ const STORE_CONFIG: Record<string, { label: string; icon: string; bg: string }> 
   },
 };
 
+const SPLASH_DURATION_MS = 5000;
+const SPLASH_FADE_MS = 400;
+
 export default function WelcomeScreen({ qrCode }: Props) {
   const [platform, setPlatform] = useState<"ios" | "android" | "unknown">("unknown");
   const [showSplash, setShowSplash] = useState(true);
+  const [splashExiting, setSplashExiting] = useState(false);
+
+  const ws = getWelcomeScreen(qrCode);
+  const splashImageUrl = ws?.welcome_image_url || ws?.logo_url;
 
   useEffect(() => {
     setPlatform(detectPlatform());
-    const timer = setTimeout(() => setShowSplash(false), 1800);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!splashImageUrl) {
+      setShowSplash(false);
+      return;
+    }
 
-  const ws = getWelcomeScreen(qrCode);
+    const exitTimer = setTimeout(() => setSplashExiting(true), SPLASH_DURATION_MS);
+    const hideTimer = setTimeout(
+      () => setShowSplash(false),
+      SPLASH_DURATION_MS + SPLASH_FADE_MS
+    );
+
+    return () => {
+      clearTimeout(exitTimer);
+      clearTimeout(hideTimer);
+    };
+  }, [splashImageUrl]);
   const links = qrCode.app_store_links ?? [];
 
   const primaryColor = ws?.color_primary ?? "#22c55e";
   const secondaryColor = ws?.color_secondary ?? "#ffffff";
   const displayName = ws?.app_name ?? qrCode.name;
 
-  // Splash screen
-  if (showSplash && ws?.welcome_image_url) {
+  // Splash screen — logo se aproxima por 5s antes da tela principal
+  if (showSplash && splashImageUrl) {
     return (
       <div
-        className="fixed inset-0 flex items-center justify-center transition-opacity duration-500"
+        className={`fixed inset-0 z-50 flex items-center justify-center ${splashExiting ? "welcome-splash-exit" : ""}`}
         style={{ backgroundColor: primaryColor }}
       >
         <img
-          src={ws.welcome_image_url}
-          alt="Loading"
-          className="max-w-[180px] max-h-[180px] object-contain"
+          src={splashImageUrl}
+          alt={displayName}
+          className="welcome-splash-logo max-w-[200px] max-h-[200px] w-[45vw] object-contain"
         />
       </div>
     );
@@ -87,7 +105,7 @@ export default function WelcomeScreen({ qrCode }: Props) {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="min-h-screen flex flex-col welcome-main-enter"
       style={{ backgroundColor: secondaryColor }}
     >
       {/* Faixa superior com cor primária (como no preview do admin) */}
