@@ -138,26 +138,21 @@ app.post("/exclusive", zValidator("json", createExclusiveSchema), async (c) => {
 
   if (qrError) return c.json({ error: qrError.message }, 500);
 
-  const ops: Promise<{ error: unknown }>[] = [
+  const [wsResult, linksResult] = await Promise.all([
     supabase.from("welcome_screens").insert({ qr_code_id: qr.id, ...body.welcome }),
     supabase.from("app_store_links").insert(
       body.app_store_links.map((l) => ({ qr_code_id: qr.id, ...l }))
     ),
-  ];
+  ]);
+
+  if (wsResult.error) return c.json({ error: wsResult.error.message }, 500);
+  if (linksResult.error) return c.json({ error: linksResult.error.message }, 500);
 
   if (body.custom_buttons?.length) {
-    ops.push(
-      supabase.from("custom_buttons").insert(
-        body.custom_buttons.map((b) => ({ qr_code_id: qr.id, ...b }))
-      )
+    const { error: buttonsError } = await supabase.from("custom_buttons").insert(
+      body.custom_buttons.map((b) => ({ qr_code_id: qr.id, ...b }))
     );
-  }
-
-  const results = await Promise.all(ops);
-  for (const r of results) {
-    if ((r as { error: { message: string } | null }).error) {
-      return c.json({ error: (r as { error: { message: string } }).error.message }, 500);
-    }
+    if (buttonsError) return c.json({ error: buttonsError.message }, 500);
   }
 
   return c.json({ ...qr, qr_data_url: await generateQRCodeDataURL(`${process.env.PUBLIC_URL}/${slug}`) }, 201);
@@ -247,7 +242,7 @@ app.get("/:id/download", async (c) => {
 
   const { generateQRCodePNG } = await import("../lib/qrcode.js");
   const png = await generateQRCodePNG(url);
-  return new Response(png, {
+  return new Response(new Uint8Array(png), {
     headers: {
       "Content-Type": "image/png",
       "Content-Disposition": `attachment; filename="${data.slug}.png"`,

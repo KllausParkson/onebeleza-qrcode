@@ -8,7 +8,8 @@
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "dev:web": "turbo run dev --filter=web",
-    "dev:api": "turbo run dev --filter=api"
+    "dev:api": "turbo run dev --filter=api",
+    "build:api": "pnpm --filter api run build"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
