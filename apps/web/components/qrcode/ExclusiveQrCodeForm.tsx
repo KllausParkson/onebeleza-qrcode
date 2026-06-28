@@ -1,10 +1,11 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api } from "@/lib/api";
+import { slugFieldSchema, slugFromName, publicUrlPrefix } from "@/lib/slug";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +18,7 @@ import type { Platform } from "@onebeleza/shared";
 
 const schema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
-  slug: z.string().min(1).regex(/^[a-z0-9-]+$/, "Use apenas letras, números e hífens"),
+  slug: slugFieldSchema,
   welcome: z.object({
     app_name: z.string().min(1, "Nome do app é obrigatório"),
     developer: z.string().optional(),
@@ -63,6 +64,7 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [slugChecking, setSlugChecking] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("design");
+  const slugManuallyEdited = useRef(false);
 
   const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -84,29 +86,43 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
   });
 
   const watchedValues = watch();
+  const urlPrefix = publicUrlPrefix();
 
   const handleNameChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const name = e.target.value;
       setValue("name", name);
-      const slug = name
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9\s-]/g, "")
-        .trim()
-        .replace(/\s+/g, "-");
-      setValue("slug", slug);
+      if (!slugManuallyEdited.current) {
+        setValue("slug", slugFromName(name));
+        setSlugAvailable(null);
+      }
     },
     [setValue]
   );
 
-  const checkSlug = useCallback(async (slug: string) => {
-    if (!slug) return;
+  const handleSlugChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      slugManuallyEdited.current = true;
+      setValue("slug", e.target.value, { shouldValidate: true });
+      setSlugAvailable(null);
+    },
+    [setValue]
+  );
+
+  const checkSlug = useCallback(async (slug: string): Promise<boolean> => {
+    const trimmed = slug.trim();
+    if (!trimmed) {
+      setSlugAvailable(null);
+      return false;
+    }
     setSlugChecking(true);
     try {
-      const r = await api.qrcodes.checkSlug(token, slug);
+      const r = await api.qrcodes.checkSlug(token, trimmed);
       setSlugAvailable(r.available);
+      return r.available;
+    } catch {
+      setSlugAvailable(null);
+      return false;
     } finally {
       setSlugChecking(false);
     }
@@ -115,8 +131,17 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
   async function onSubmit(data: FormData) {
     setSaving(true);
     setError("");
+
+    const slug = data.slug.trim();
+    const available = await checkSlug(slug);
+    if (!available) {
+      setError("Esta URL já está em uso. Escolha outro nome.");
+      setSaving(false);
+      return;
+    }
+
     try {
-      await api.qrcodes.createExclusive(token, data);
+      await api.qrcodes.createExclusive(token, { ...data, slug });
       router.push("/admin/qrcodes");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar");
@@ -131,6 +156,9 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
     { id: "links", label: "App Store Links" },
     { id: "welcome", label: "Welcome Screen" },
   ];
+
+  const submitDisabled =
+    saving || slugChecking || slugAvailable === false || slugAvailable === null;
 
   return (
     <div className="flex h-full">
@@ -165,17 +193,24 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
             <Label className="text-xs text-gray-600">URL pública *</Label>
             <div className="flex items-center mt-1">
               <span className="text-xs text-gray-400 bg-gray-50 border border-r-0 border-gray-200 rounded-l-md px-2.5 h-9 flex items-center">
-                qrco.one/
+                {urlPrefix}
               </span>
               <Input
                 {...register("slug")}
+                onChange={handleSlugChange}
                 onBlur={(e) => checkSlug(e.target.value)}
                 className="rounded-l-none font-mono text-xs"
               />
             </div>
             {slugChecking && <p className="text-xs text-gray-400 mt-1">Verificando...</p>}
             {slugAvailable === true && <p className="text-xs text-green-500 mt-1">Disponível</p>}
-            {slugAvailable === false && <p className="text-xs text-red-500 mt-1">Já está em uso</p>}
+            {slugAvailable === false && (
+              <p className="text-xs text-red-500 mt-1">Já está em uso — escolha outro nome</p>
+            )}
+            {slugAvailable === null && watchedValues.slug && !slugChecking && (
+              <p className="text-xs text-amber-600 mt-1">Confirme a disponibilidade saindo do campo</p>
+            )}
+            {errors.slug && <p className="text-xs text-red-500 mt-1">{errors.slug.message}</p>}
           </div>
         </div>
 
@@ -358,7 +393,7 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
             </div>
           )}
 
-          <Button type="submit" disabled={saving} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
+          <Button type="submit" disabled={submitDisabled} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
             {saving ? "Salvando..." : "Criar QR Code Exclusivo"}
           </Button>
         </form>

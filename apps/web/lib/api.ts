@@ -5,7 +5,9 @@ import type {
   CreateExclusiveQrCodePayload,
 } from "@onebeleza/shared";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:3001";
 
 async function apiFetch<T>(
   path: string,
@@ -62,7 +64,7 @@ export const api = {
       }),
     checkSlug: (token: string, slug: string) =>
       apiFetch<{ available: boolean; slug: string }>(
-        `/api/qrcodes/slug/check?slug=${slug}`,
+        `/api/qrcodes/slug/check?slug=${encodeURIComponent(slug)}`,
         { token }
       ),
     downloadUrl: (id: string, format: "png" | "svg") =>

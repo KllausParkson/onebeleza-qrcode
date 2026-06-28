@@ -2,10 +2,15 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { supabase } from "../lib/supabase.js";
-import { generateSlugFromName, isSlugAvailable, ensureUniqueSlug } from "../lib/slug.js";
+import { isSlugAvailable } from "../lib/slug.js";
 import { generateQRCodeDataURL } from "../lib/qrcode.js";
 import { ONE_BELEZA_LINKS } from "@onebeleza/shared";
 import type { Variables } from "../index.js";
+
+const slugSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-zA-Z0-9-]+$/, "Use apenas letras, números e hífens");
 
 const app = new Hono<{ Variables: Variables }>();
 
@@ -23,14 +28,14 @@ const welcomeSchema = z.object({
 
 const createBaseSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1).optional(),
+  slug: slugSchema,
   folder_id: z.string().uuid().optional(),
   welcome: welcomeSchema,
 });
 
 const createExclusiveSchema = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1).optional(),
+  slug: slugSchema,
   folder_id: z.string().uuid().optional(),
   welcome: welcomeSchema.extend({ app_name: z.string().min(1) }),
   app_store_links: z
@@ -76,6 +81,20 @@ app.get("/", async (c) => {
   return c.json({ data, total: count });
 });
 
+/** GET /qrcodes/slug/check?slug=... */
+app.get("/slug/check", async (c) => {
+  const slug = c.req.query("slug")?.trim();
+  if (!slug) return c.json({ error: "Slug required" }, 400);
+
+  const parsed = slugSchema.safeParse(slug);
+  if (!parsed.success) {
+    return c.json({ available: false, slug, error: parsed.error.errors[0]?.message });
+  }
+
+  const available = await isSlugAvailable(parsed.data);
+  return c.json({ available, slug: parsed.data });
+});
+
 /** GET /qrcodes/:id */
 app.get("/:id", async (c) => {
   const userId = c.get("userId");
@@ -97,8 +116,10 @@ app.post("/base", zValidator("json", createBaseSchema), async (c) => {
   const userId = c.get("userId");
   const body = c.req.valid("json");
 
-  const slugBase = body.slug ?? generateSlugFromName(body.name);
-  const slug = await ensureUniqueSlug(slugBase);
+  const slug = body.slug.trim();
+  if (!await isSlugAvailable(slug)) {
+    return c.json({ error: "Slug already in use" }, 409);
+  }
 
   const { data: qr, error: qrError } = await supabase
     .from("qr_codes")
@@ -127,8 +148,10 @@ app.post("/exclusive", zValidator("json", createExclusiveSchema), async (c) => {
   const userId = c.get("userId");
   const body = c.req.valid("json");
 
-  const slugBase = body.slug ?? generateSlugFromName(body.name);
-  const slug = await ensureUniqueSlug(slugBase);
+  const slug = body.slug.trim();
+  if (!await isSlugAvailable(slug)) {
+    return c.json({ error: "Slug already in use" }, 409);
+  }
 
   const { data: qr, error: qrError } = await supabase
     .from("qr_codes")
@@ -248,15 +271,6 @@ app.get("/:id/download", async (c) => {
       "Content-Disposition": `attachment; filename="${data.slug}.png"`,
     },
   });
-});
-
-/** GET /qrcodes/slug/check?slug=... — verifica disponibilidade */
-app.get("/slug/check", async (c) => {
-  const slug = c.req.query("slug");
-  if (!slug) return c.json({ error: "slug is required" }, 400);
-
-  const available = await isSlugAvailable(slug);
-  return c.json({ available, slug });
 });
 
 export default app;

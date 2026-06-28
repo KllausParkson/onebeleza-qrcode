@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import type { QrCode } from "@onebeleza/shared";
 import WelcomeScreen from "@/components/qrcode/WelcomeScreen";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:3001";
 
 async function getQrCode(slug: string): Promise<QrCode | null> {
   try {
