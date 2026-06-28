@@ -7,13 +7,14 @@ import { cn } from "@/lib/utils";
 interface Props {
   token: string;
   onUpload: (url: string) => void;
+  defaultUrl?: string;
   className?: string;
   hint?: string;
 }
 
-export default function ImageUpload({ token, onUpload, className, hint }: Props) {
+export default function ImageUpload({ token, onUpload, defaultUrl, className, hint }: Props) {
   const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(defaultUrl ?? null);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 

@@ -51,7 +51,19 @@ export const api = {
         body: JSON.stringify(payload),
         token,
       }),
-    update: (token: string, id: string, payload: Partial<QrCode>) =>
+    update: (token: string, id: string, payload: Record<string, unknown>) =>
+      apiFetch<QrCode>(`/api/qrcodes/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        token,
+      }),
+    updateBase: (token: string, id: string, payload: CreateBaseQrCodePayload) =>
+      apiFetch<QrCode>(`/api/qrcodes/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        token,
+      }),
+    updateExclusive: (token: string, id: string, payload: CreateExclusiveQrCodePayload) =>
       apiFetch<QrCode>(`/api/qrcodes/${id}`, {
         method: "PUT",
         body: JSON.stringify(payload),
@@ -62,11 +74,14 @@ export const api = {
         method: "DELETE",
         token,
       }),
-    checkSlug: (token: string, slug: string) =>
-      apiFetch<{ available: boolean; slug: string }>(
-        `/api/qrcodes/slug/check?slug=${encodeURIComponent(slug)}`,
+    checkSlug: (token: string, slug: string, excludeId?: string) => {
+      const params = new URLSearchParams({ slug });
+      if (excludeId) params.set("excludeId", excludeId);
+      return apiFetch<{ available: boolean; slug: string }>(
+        `/api/qrcodes/slug/check?${params}`,
         { token }
-      ),
+      );
+    },
     downloadUrl: (id: string, format: "png" | "svg") =>
       `${API_URL}/api/qrcodes/${id}/download?format=${format}`,
   },

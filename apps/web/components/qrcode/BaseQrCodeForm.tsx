@@ -1,11 +1,12 @@
 "use client";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import { slugFieldSchema, slugFromName, publicUrlPrefix } from "@/lib/slug";
+import type { CreateBaseQrCodePayload } from "@onebeleza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,23 +40,45 @@ const COLOR_PRESETS = [
   { primary: "#f97316", secondary: "#fff7ed" },
 ];
 
-export default function BaseQrCodeForm({ token }: { token: string }) {
+interface Props {
+  token: string;
+  mode?: "create" | "edit";
+  qrId?: string;
+  initialValues?: CreateBaseQrCodePayload;
+}
+
+export default function BaseQrCodeForm({
+  token,
+  mode = "create",
+  qrId,
+  initialValues,
+}: Props) {
+  const isEdit = mode === "edit";
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [slugChecking, setSlugChecking] = useState(false);
-  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
-  const slugManuallyEdited = useRef(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(isEdit ? true : null);
+  const slugManuallyEdited = useRef(isEdit);
+  const originalSlug = useRef(initialValues?.slug ?? "");
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
+    defaultValues: initialValues ?? {
       welcome: { color_primary: "#22c55e", color_secondary: "#f0fdf4" },
     },
   });
 
   const watchedValues = watch();
   const urlPrefix = publicUrlPrefix();
+
+  useEffect(() => {
+    if (isEdit) {
+      slugManuallyEdited.current = true;
+      originalSlug.current = initialValues?.slug ?? "";
+      setSlugAvailable(true);
+    }
+  }, [isEdit, initialValues?.slug]);
 
   const handleNameChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,9 +108,13 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
         setSlugAvailable(null);
         return false;
       }
+      if (isEdit && trimmed === originalSlug.current) {
+        setSlugAvailable(true);
+        return true;
+      }
       setSlugChecking(true);
       try {
-        const result = await api.qrcodes.checkSlug(token, trimmed);
+        const result = await api.qrcodes.checkSlug(token, trimmed, isEdit ? qrId : undefined);
         setSlugAvailable(result.available);
         return result.available;
       } catch {
@@ -97,7 +124,7 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
         setSlugChecking(false);
       }
     },
-    [token]
+    [token, isEdit, qrId]
   );
 
   async function onSubmit(data: FormData) {
@@ -113,7 +140,11 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
     }
 
     try {
-      await api.qrcodes.createBase(token, { ...data, slug });
+      if (isEdit && qrId) {
+        await api.qrcodes.updateBase(token, qrId, { ...data, slug });
+      } else {
+        await api.qrcodes.createBase(token, { ...data, slug });
+      }
       router.push("/admin/qrcodes");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar");
@@ -127,28 +158,32 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
     { platform: "android" as const, url: ONE_BELEZA_LINKS.android },
   ];
 
-  const submitDisabled =
-    saving || slugChecking || slugAvailable === false || slugAvailable === null;
+  const submitDisabled = saving || slugChecking || slugAvailable !== true;
 
   return (
     <div className="flex h-full">
-      {/* Form panel */}
       <div className="flex-1 overflow-y-auto p-6 max-w-xl">
         <div className="flex items-center gap-2 mb-6">
-          <Link href="/admin/qrcodes/new" className="text-gray-400 hover:text-gray-700">
+          <Link
+            href={isEdit ? "/admin/qrcodes" : "/admin/qrcodes/new"}
+            className="text-gray-400 hover:text-gray-700"
+          >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center gap-2">
               <Smartphone className="w-5 h-5 text-green-500" />
-              <h1 className="text-xl font-semibold text-gray-900">APP Base</h1>
+              <h1 className="text-xl font-semibold text-gray-900">
+                {isEdit ? "Editar APP Base" : "APP Base"}
+              </h1>
             </div>
-            <p className="text-sm text-gray-500">Links One Beleza pré-configurados</p>
+            <p className="text-sm text-gray-500">
+              {isEdit ? "Atualize logo, cores e informações do cliente" : "Links One Beleza pré-configurados"}
+            </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Links fixos */}
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <p className="text-xs font-medium text-green-700 mb-2">Links pré-configurados (fixos)</p>
             <div className="space-y-1">
@@ -161,7 +196,6 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
             </div>
           </div>
 
-          {/* Design */}
           <section>
             <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
               <span className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center text-[10px]">✏</span>
@@ -212,7 +246,6 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
             </div>
           </section>
 
-          {/* Info do cliente */}
           <section>
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Informações do Cliente</h2>
             <div className="space-y-3">
@@ -257,6 +290,7 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
                 <Label className="text-xs text-gray-600">Logo do cliente</Label>
                 <ImageUpload
                   token={token}
+                  defaultUrl={initialValues?.welcome.logo_url}
                   onUpload={(url) => setValue("welcome.logo_url", url)}
                   className="mt-1"
                 />
@@ -290,6 +324,7 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
                 <Label className="text-xs text-gray-600">Imagem da welcome screen</Label>
                 <ImageUpload
                   token={token}
+                  defaultUrl={initialValues?.welcome.welcome_image_url}
                   onUpload={(url) => setValue("welcome.welcome_image_url", url)}
                   className="mt-1"
                 />
@@ -304,19 +339,15 @@ export default function BaseQrCodeForm({ token }: { token: string }) {
           )}
 
           <Button type="submit" disabled={submitDisabled} className="w-full">
-            {saving ? "Salvando..." : "Criar QR Code"}
+            {saving ? "Salvando..." : isEdit ? "Salvar alterações" : "Criar QR Code"}
           </Button>
         </form>
       </div>
 
-      {/* Preview panel */}
       <div className="w-72 border-l border-gray-200 bg-gray-50 flex flex-col items-center justify-start pt-16 sticky top-0 h-screen">
         <div className="flex gap-3 mb-6">
-          <button className="px-4 py-1.5 bg-green-500 text-white rounded-full text-xs font-medium">
+          <button type="button" className="px-4 py-1.5 bg-green-500 text-white rounded-full text-xs font-medium">
             Preview
-          </button>
-          <button className="px-4 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-full text-xs font-medium hover:bg-gray-50">
-            QR Code
           </button>
         </div>
         <PhonePreview

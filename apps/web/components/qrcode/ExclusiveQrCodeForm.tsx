@@ -1,11 +1,12 @@
 "use client";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import { slugFieldSchema, slugFromName, publicUrlPrefix } from "@/lib/slug";
+import type { CreateExclusiveQrCodePayload, Platform } from "@onebeleza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +15,6 @@ import PhonePreview from "@/components/qrcode/PhonePreview";
 import ImageUpload from "@/components/qrcode/ImageUpload";
 import { ArrowLeft, Sparkles, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import type { Platform } from "@onebeleza/shared";
 
 const schema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -57,19 +57,33 @@ const PLATFORM_OPTIONS: { value: Platform; label: string; placeholder: string }[
   { value: "amazon", label: "Amazon Appstore", placeholder: "https://www.amazon.com/..." },
 ];
 
-export default function ExclusiveQrCodeForm({ token }: { token: string }) {
+interface Props {
+  token: string;
+  mode?: "create" | "edit";
+  qrId?: string;
+  initialValues?: CreateExclusiveQrCodePayload;
+}
+
+export default function ExclusiveQrCodeForm({
+  token,
+  mode = "create",
+  qrId,
+  initialValues,
+}: Props) {
+  const isEdit = mode === "edit";
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(isEdit ? true : null);
   const [slugChecking, setSlugChecking] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("design");
-  const slugManuallyEdited = useRef(false);
+  const slugManuallyEdited = useRef(isEdit);
+  const originalSlug = useRef(initialValues?.slug ?? "");
 
   const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      welcome: { color_primary: "#1a1a1a", color_secondary: "#ffffff" },
+    defaultValues: initialValues ?? {
+      welcome: { color_primary: "#1a1a1a", color_secondary: "#ffffff", app_name: "" },
       app_store_links: [{ platform: "ios", url: "" }, { platform: "android", url: "" }],
       custom_buttons: [],
     },
@@ -87,6 +101,14 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
 
   const watchedValues = watch();
   const urlPrefix = publicUrlPrefix();
+
+  useEffect(() => {
+    if (isEdit) {
+      slugManuallyEdited.current = true;
+      originalSlug.current = initialValues?.slug ?? "";
+      setSlugAvailable(true);
+    }
+  }, [isEdit, initialValues?.slug]);
 
   const handleNameChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,9 +137,13 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
       setSlugAvailable(null);
       return false;
     }
+    if (isEdit && trimmed === originalSlug.current) {
+      setSlugAvailable(true);
+      return true;
+    }
     setSlugChecking(true);
     try {
-      const r = await api.qrcodes.checkSlug(token, trimmed);
+      const r = await api.qrcodes.checkSlug(token, trimmed, isEdit ? qrId : undefined);
       setSlugAvailable(r.available);
       return r.available;
     } catch {
@@ -126,7 +152,7 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
     } finally {
       setSlugChecking(false);
     }
-  }, [token]);
+  }, [token, isEdit, qrId]);
 
   async function onSubmit(data: FormData) {
     setSaving(true);
@@ -141,7 +167,11 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
     }
 
     try {
-      await api.qrcodes.createExclusive(token, { ...data, slug });
+      if (isEdit && qrId) {
+        await api.qrcodes.updateExclusive(token, qrId, { ...data, slug });
+      } else {
+        await api.qrcodes.createExclusive(token, { ...data, slug });
+      }
       router.push("/admin/qrcodes");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar");
@@ -157,27 +187,31 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
     { id: "welcome", label: "Welcome Screen" },
   ];
 
-  const submitDisabled =
-    saving || slugChecking || slugAvailable === false || slugAvailable === null;
+  const submitDisabled = saving || slugChecking || slugAvailable !== true;
 
   return (
     <div className="flex h-full">
-      {/* Form panel */}
       <div className="flex-1 overflow-y-auto p-6 max-w-xl">
         <div className="flex items-center gap-2 mb-6">
-          <Link href="/admin/qrcodes/new" className="text-gray-400 hover:text-gray-700">
+          <Link
+            href={isEdit ? "/admin/qrcodes" : "/admin/qrcodes/new"}
+            className="text-gray-400 hover:text-gray-700"
+          >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-blue-500" />
-              <h1 className="text-xl font-semibold text-gray-900">APP Exclusivo</h1>
+              <h1 className="text-xl font-semibold text-gray-900">
+                {isEdit ? "Editar APP Exclusivo" : "APP Exclusivo"}
+              </h1>
             </div>
-            <p className="text-sm text-gray-500">Customização completa</p>
+            <p className="text-sm text-gray-500">
+              {isEdit ? "Atualize logo, cores, links e informações" : "Customização completa"}
+            </p>
           </div>
         </div>
 
-        {/* Nome e slug */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 space-y-3">
           <div>
             <Label htmlFor="qr-name" className="text-xs text-gray-600">Nome do QR Code *</Label>
@@ -215,7 +249,6 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)}>
-          {/* Section accordion */}
           {sections.map((section) => (
             <div key={section.id} className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden">
               <button
@@ -229,46 +262,42 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
 
               {activeSection === section.id && (
                 <div className="border-t border-gray-100 px-4 py-4 space-y-3">
-                  {/* Design */}
                   {section.id === "design" && (
-                    <>
-                      <div>
-                        <Label className="text-xs text-gray-600 mb-2 block">Cores</Label>
-                        <div className="flex gap-2 mb-3">
-                          {COLOR_PRESETS.map((c, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => {
-                                setValue("welcome.color_primary", c.primary);
-                                setValue("welcome.color_secondary", c.secondary);
-                              }}
-                              className="w-8 h-8 rounded-full border-2 border-white ring-2 ring-gray-200 hover:ring-gray-400 transition-all"
-                              style={{ backgroundColor: c.primary }}
-                            />
-                          ))}
-                        </div>
-                        <div className="flex gap-3">
-                          <div className="flex-1">
-                            <Label className="text-xs text-gray-500">Primária</Label>
-                            <div className="flex gap-2 mt-1">
-                              <input type="color" {...register("welcome.color_primary")} className="h-9 w-9 rounded border border-gray-200 cursor-pointer p-1" />
-                              <Input {...register("welcome.color_primary")} className="text-xs font-mono" />
-                            </div>
+                    <div>
+                      <Label className="text-xs text-gray-600 mb-2 block">Cores</Label>
+                      <div className="flex gap-2 mb-3">
+                        {COLOR_PRESETS.map((c, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              setValue("welcome.color_primary", c.primary);
+                              setValue("welcome.color_secondary", c.secondary);
+                            }}
+                            className="w-8 h-8 rounded-full border-2 border-white ring-2 ring-gray-200 hover:ring-gray-400 transition-all"
+                            style={{ backgroundColor: c.primary }}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <Label className="text-xs text-gray-500">Primária</Label>
+                          <div className="flex gap-2 mt-1">
+                            <input type="color" {...register("welcome.color_primary")} className="h-9 w-9 rounded border border-gray-200 cursor-pointer p-1" />
+                            <Input {...register("welcome.color_primary")} className="text-xs font-mono" />
                           </div>
-                          <div className="flex-1">
-                            <Label className="text-xs text-gray-500">Secundária</Label>
-                            <div className="flex gap-2 mt-1">
-                              <input type="color" {...register("welcome.color_secondary")} className="h-9 w-9 rounded border border-gray-200 cursor-pointer p-1" />
-                              <Input {...register("welcome.color_secondary")} className="text-xs font-mono" />
-                            </div>
+                        </div>
+                        <div className="flex-1">
+                          <Label className="text-xs text-gray-500">Secundária</Label>
+                          <div className="flex gap-2 mt-1">
+                            <input type="color" {...register("welcome.color_secondary")} className="h-9 w-9 rounded border border-gray-200 cursor-pointer p-1" />
+                            <Input {...register("welcome.color_secondary")} className="text-xs font-mono" />
                           </div>
                         </div>
                       </div>
-                    </>
+                    </div>
                   )}
 
-                  {/* App Info */}
                   {section.id === "info" && (
                     <>
                       <div>
@@ -284,6 +313,7 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
                         <Label className="text-xs text-gray-600">Logo do app <span className="text-gray-400">(180×180 px)</span></Label>
                         <ImageUpload
                           token={token}
+                          defaultUrl={initialValues?.welcome.logo_url}
                           onUpload={(url) => setValue("welcome.logo_url", url)}
                           hint="180×180 px recomendado"
                           className="mt-1"
@@ -323,7 +353,6 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
                     </>
                   )}
 
-                  {/* App Store Links */}
                   {section.id === "links" && (
                     <>
                       <p className="text-xs text-gray-500">Ao menos um link é obrigatório.</p>
@@ -371,12 +400,12 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
                     </>
                   )}
 
-                  {/* Welcome Screen */}
                   {section.id === "welcome" && (
                     <>
                       <p className="text-xs text-gray-500">Imagem exibida enquanto a página carrega.</p>
                       <ImageUpload
                         token={token}
+                        defaultUrl={initialValues?.welcome.welcome_image_url}
                         onUpload={(url) => setValue("welcome.welcome_image_url", url)}
                         hint="Será exibida na splash screen"
                       />
@@ -394,15 +423,14 @@ export default function ExclusiveQrCodeForm({ token }: { token: string }) {
           )}
 
           <Button type="submit" disabled={submitDisabled} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
-            {saving ? "Salvando..." : "Criar QR Code Exclusivo"}
+            {saving ? "Salvando..." : isEdit ? "Salvar alterações" : "Criar QR Code Exclusivo"}
           </Button>
         </form>
       </div>
 
-      {/* Preview panel */}
       <div className="w-72 border-l border-gray-200 bg-gray-50 flex flex-col items-center justify-start pt-16 sticky top-0 h-screen">
         <div className="flex gap-3 mb-6">
-          <button className="px-4 py-1.5 bg-blue-500 text-white rounded-full text-xs font-medium">
+          <button type="button" className="px-4 py-1.5 bg-blue-500 text-white rounded-full text-xs font-medium">
             Preview
           </button>
         </div>

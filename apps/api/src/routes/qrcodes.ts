@@ -81,9 +81,10 @@ app.get("/", async (c) => {
   return c.json({ data, total: count });
 });
 
-/** GET /qrcodes/slug/check?slug=... */
+/** GET /qrcodes/slug/check?slug=...&excludeId=... */
 app.get("/slug/check", async (c) => {
   const slug = c.req.query("slug")?.trim();
+  const excludeId = c.req.query("excludeId");
   if (!slug) return c.json({ error: "Slug required" }, 400);
 
   const parsed = slugSchema.safeParse(slug);
@@ -91,7 +92,7 @@ app.get("/slug/check", async (c) => {
     return c.json({ available: false, slug, error: parsed.error.errors[0]?.message });
   }
 
-  const available = await isSlugAvailable(parsed.data);
+  const available = await isSlugAvailable(parsed.data, excludeId);
   return c.json({ available, slug: parsed.data });
 });
 
@@ -221,7 +222,28 @@ app.put("/:id", async (c) => {
     );
   }
 
-  return c.json(qr);
+  if (body.custom_buttons !== undefined && existing.type === "exclusive") {
+    await supabase.from("custom_buttons").delete().eq("qr_code_id", id);
+    if (body.custom_buttons.length) {
+      const { error: buttonsError } = await supabase.from("custom_buttons").insert(
+        body.custom_buttons.map((b: { label: string; url: string; order?: number }, i: number) => ({
+          qr_code_id: id,
+          label: b.label,
+          url: b.url,
+          order: b.order ?? i,
+        }))
+      );
+      if (buttonsError) return c.json({ error: buttonsError.message }, 500);
+    }
+  }
+
+  const { data: updated } = await supabase
+    .from("qr_codes")
+    .select(`*, welcome_screens(*), app_store_links(*), custom_buttons(*)`)
+    .eq("id", id)
+    .single();
+
+  return c.json(updated ?? qr);
 });
 
 /** DELETE /qrcodes/:id */
