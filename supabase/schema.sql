@@ -10,14 +10,14 @@ create extension if not exists "pgcrypto";
 -- Tabelas
 -- ========================
 
-create table folders (
+create table if not exists folders (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
   name        text not null,
   created_at  timestamptz not null default now()
 );
 
-create table qr_codes (
+create table if not exists qr_codes (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
   folder_id   uuid references folders(id) on delete set null,
@@ -30,7 +30,7 @@ create table qr_codes (
   updated_at  timestamptz not null default now()
 );
 
-create table welcome_screens (
+create table if not exists welcome_screens (
   id                  uuid primary key default gen_random_uuid(),
   qr_code_id          uuid not null unique references qr_codes(id) on delete cascade,
   app_name            text,
@@ -46,7 +46,7 @@ create table welcome_screens (
   updated_at          timestamptz not null default now()
 );
 
-create table app_store_links (
+create table if not exists app_store_links (
   id          uuid primary key default gen_random_uuid(),
   qr_code_id  uuid not null references qr_codes(id) on delete cascade,
   platform    text not null check (platform in ('ios', 'android', 'amazon')),
@@ -54,7 +54,7 @@ create table app_store_links (
   unique (qr_code_id, platform)
 );
 
-create table custom_buttons (
+create table if not exists custom_buttons (
   id          uuid primary key default gen_random_uuid(),
   qr_code_id  uuid not null references qr_codes(id) on delete cascade,
   label       text not null,
@@ -62,7 +62,7 @@ create table custom_buttons (
   "order"     integer not null default 0
 );
 
-create table scans (
+create table if not exists scans (
   id          uuid primary key default gen_random_uuid(),
   qr_code_id  uuid not null references qr_codes(id) on delete cascade,
   scanned_at  timestamptz not null default now(),
@@ -74,11 +74,11 @@ create table scans (
 -- Indexes
 -- ========================
 
-create index on qr_codes (user_id);
-create index on qr_codes (slug);
-create index on qr_codes (is_active);
-create index on scans (qr_code_id);
-create index on scans (scanned_at);
+create index if not exists idx_qr_codes_user_id on qr_codes (user_id);
+create index if not exists idx_qr_codes_slug on qr_codes (slug);
+create index if not exists idx_qr_codes_is_active on qr_codes (is_active);
+create index if not exists idx_scans_qr_code_id on scans (qr_code_id);
+create index if not exists idx_scans_scanned_at on scans (scanned_at);
 
 -- ========================
 -- Trigger: updated_at
@@ -92,10 +92,12 @@ begin
 end;
 $$;
 
+drop trigger if exists qr_codes_updated_at on qr_codes;
 create trigger qr_codes_updated_at
   before update on qr_codes
   for each row execute function update_updated_at();
 
+drop trigger if exists welcome_screens_updated_at on welcome_screens;
 create trigger welcome_screens_updated_at
   before update on welcome_screens
   for each row execute function update_updated_at();
@@ -125,34 +127,40 @@ alter table custom_buttons enable row level security;
 alter table scans enable row level security;
 
 -- Folders: apenas o dono vê/altera
+drop policy if exists "folders_owner" on folders;
 create policy "folders_owner" on folders
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
 -- QR Codes: apenas o dono vê/altera
+drop policy if exists "qrcodes_owner" on qr_codes;
 create policy "qrcodes_owner" on qr_codes
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
 -- Welcome screens: owner via qr_code
+drop policy if exists "welcome_screens_owner" on welcome_screens;
 create policy "welcome_screens_owner" on welcome_screens
   using (
     qr_code_id in (select id from qr_codes where user_id = auth.uid())
   );
 
 -- App store links: owner via qr_code
+drop policy if exists "app_store_links_owner" on app_store_links;
 create policy "app_store_links_owner" on app_store_links
   using (
     qr_code_id in (select id from qr_codes where user_id = auth.uid())
   );
 
 -- Custom buttons: owner via qr_code
+drop policy if exists "custom_buttons_owner" on custom_buttons;
 create policy "custom_buttons_owner" on custom_buttons
   using (
     qr_code_id in (select id from qr_codes where user_id = auth.uid())
   );
 
 -- Scans: service role only (via API backend)
+drop policy if exists "scans_service" on scans;
 create policy "scans_service" on scans
   using (false);  -- API usa service_role, que ignora RLS
 

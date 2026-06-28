@@ -1,13 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "@/lib/api";
 import type { QrCode } from "@onebeleza/shared";
-import { QRCodeSVG } from "qrcode.react";
-import { Download, ExternalLink, MoreHorizontal, Pencil, Trash2, TrendingUp } from "lucide-react";
+import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
+import { Download, ExternalLink, Pencil, Trash2, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
-const PUBLIC_URL = process.env.NEXT_PUBLIC_PUBLIC_URL ?? "https://qrco.one";
+const PUBLIC_URL = process.env.NEXT_PUBLIC_PUBLIC_URL ?? "http://localhost:3000";
 
 interface Props {
   token: string;
@@ -40,12 +40,39 @@ export default function QrCodeList({ token }: Props) {
     setQrCodes((prev) => prev.filter((q) => q.id !== id));
   }
 
-  function handleDownload(id: string, slug: string, format: "png" | "svg") {
-    const url = api.qrcodes.downloadUrl(id, format);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${slug}.${format}`;
-    a.click();
+  function downloadQR(slug: string, format: "png" | "svg") {
+    const qrUrl = `${PUBLIC_URL}/${slug}`;
+
+    if (format === "png") {
+      // Renderiza em canvas temporário e faz download
+      const canvas = document.createElement("canvas");
+      const size = 512;
+      canvas.width = size;
+      canvas.height = size;
+
+      import("qrcode").then(({ default: QRCode }) => {
+        QRCode.toCanvas(canvas, qrUrl, { width: size, margin: 2 }, () => {
+          const link = document.createElement("a");
+          link.download = `${slug}.png`;
+          link.href = canvas.toDataURL("image/png");
+          link.click();
+        });
+      });
+      return;
+    }
+
+    // SVG: serializa o elemento SVG do DOM
+    const svgEl = document.querySelector(`[data-qr-slug="${slug}"] svg`);
+    if (!svgEl) return;
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svgEl);
+    const blob = new Blob([svgStr], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.download = `${slug}.svg`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   if (loading) {
@@ -94,7 +121,10 @@ export default function QrCodeList({ token }: Props) {
               className="flex items-center gap-4 bg-white border border-gray-200 rounded-xl px-4 py-3 hover:border-gray-300 transition-colors"
             >
               {/* QR Preview */}
-              <div className="w-14 h-14 flex-shrink-0 bg-white border border-gray-100 rounded-lg p-1 flex items-center justify-center">
+              <div
+                data-qr-slug={qr.slug}
+                className="w-14 h-14 flex-shrink-0 bg-white border border-gray-100 rounded-lg p-1 flex items-center justify-center"
+              >
                 <QRCodeSVG
                   value={`${PUBLIC_URL}/${qr.slug}`}
                   size={48}
@@ -140,7 +170,7 @@ export default function QrCodeList({ token }: Props) {
                   <ExternalLink className="w-4 h-4" />
                 </a>
                 <button
-                  onClick={() => handleDownload(qr.id, qr.slug, "png")}
+                  onClick={() => downloadQR(qr.slug, "png")}
                   className="p-1.5 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
                   title="Download PNG"
                 >
