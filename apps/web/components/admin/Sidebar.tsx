@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { QrCode, FolderOpen, LayoutDashboard, LogOut, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { clearActivity } from "@/lib/auth/session";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ export default function AdminSidebar() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
+    clearActivity();
     router.push("/auth");
   }
 

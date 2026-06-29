@@ -1,13 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
 import QrCodeList from "@/components/admin/QrCodeList";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 
-export default async function QrCodesPage() {
-  const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-
+export default function QrCodesPage() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -22,7 +18,7 @@ export default async function QrCodesPage() {
           </Link>
         </Button>
       </div>
-      <QrCodeList token={session?.access_token ?? ""} />
+      <QrCodeList />
     </div>
   );
 }
