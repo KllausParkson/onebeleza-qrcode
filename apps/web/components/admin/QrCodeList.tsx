@@ -3,14 +3,16 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { QrCode } from "@onebeleza/shared";
 import { QRCodeSVG } from "qrcode.react";
-import { Download, ExternalLink, Pencil, Trash2, TrendingUp, Loader2 } from "lucide-react";
+import { Download, ExternalLink, Pencil, Trash2, TrendingUp, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useAdminSession, getFreshAccessToken } from "@/lib/auth/use-admin-session";
 import QrCodeListSkeleton from "@/components/admin/QrCodeListSkeleton";
 
 const PUBLIC_URL = process.env.NEXT_PUBLIC_PUBLIC_URL ?? "http://localhost:3000";
 const SLOW_LOAD_MS = 4000;
+const SEARCH_DEBOUNCE_MS = 300;
 
 export default function QrCodeList() {
   const { token, ready } = useAdminSession();
@@ -19,6 +21,13 @@ export default function QrCodeList() {
   const [slowLoad, setSlowLoad] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [filter, setFilter] = useState<"all" | "base" | "exclusive">("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     if (!ready) return;
@@ -37,7 +46,9 @@ export default function QrCodeList() {
           setLoadError("Sessão expirada. Faça login novamente.");
           return;
         }
-        const params = filter !== "all" ? { type: filter } : undefined;
+        const params: Record<string, string> = {};
+        if (filter !== "all") params.type = filter;
+        if (searchQuery) params.search = searchQuery;
         const result = await api.qrcodes.list(accessToken, params);
         setQrCodes(result.data);
       } catch (e) {
@@ -51,7 +62,7 @@ export default function QrCodeList() {
 
     load();
     return () => clearTimeout(slowTimer);
-  }, [token, ready, filter]);
+  }, [token, ready, filter, searchQuery]);
 
   async function handleDelete(id: string) {
     if (!confirm("Deseja excluir este QR Code?")) return;
@@ -94,19 +105,7 @@ export default function QrCodeList() {
     URL.revokeObjectURL(url);
   }
 
-  if (!ready || loading) {
-    return (
-      <div>
-        {slowLoad && (
-          <div className="flex items-center gap-2 mb-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-            <span>Carregando QR Codes… O servidor pode levar alguns segundos para iniciar.</span>
-          </div>
-        )}
-        <QrCodeListSkeleton />
-      </div>
-    );
-  }
+  const showInitialLoad = !ready || (loading && qrCodes.length === 0 && !searchQuery);
 
   return (
     <div>
@@ -116,29 +115,66 @@ export default function QrCodeList() {
         </div>
       )}
 
-      <div className="flex items-center gap-2 mb-4">
-        {(["all", "base", "exclusive"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              filter === f
-                ? "bg-green-500 text-white"
-                : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-            }`}
-          >
-            {f === "all" ? "Todos" : f === "base" ? "APP Base" : "APP Exclusivo"}
-          </button>
-        ))}
-        <span className="ml-auto text-sm text-gray-500">{qrCodes.length} QR Codes</span>
-      </div>
+      {ready && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {(["all", "base", "exclusive"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                filter === f
+                  ? "bg-green-500 text-white"
+                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {f === "all" ? "Todos" : f === "base" ? "APP Base" : "APP Exclusivo"}
+            </button>
+          ))}
 
-      {qrCodes.length === 0 ? (
+          <div className="relative flex-1 min-w-[200px] max-w-xs ml-auto">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Buscar por nome ou URL..."
+              className="pl-8 h-9 text-sm"
+            />
+          </div>
+
+          <span className="text-sm text-gray-500 whitespace-nowrap">
+            {loading ? "..." : `${qrCodes.length} QR Code${qrCodes.length !== 1 ? "s" : ""}`}
+          </span>
+        </div>
+      )}
+
+      {showInitialLoad ? (
+        <div>
+          {slowLoad && (
+            <div className="flex items-center gap-2 mb-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              <span>Carregando QR Codes… O servidor pode levar alguns segundos para iniciar.</span>
+            </div>
+          )}
+          <QrCodeListSkeleton />
+        </div>
+      ) : loading ? (
+        <div className="flex items-center justify-center py-12 text-sm text-gray-500 gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Buscando...
+        </div>
+      ) : qrCodes.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-sm">Nenhum QR Code encontrado.</p>
-          <Link href="/admin/qrcodes/new" className="text-green-500 hover:underline text-sm mt-1 inline-block">
-            Criar o primeiro QR Code
-          </Link>
+          <p className="text-sm">
+            {searchQuery
+              ? `Nenhum resultado para "${searchQuery}".`
+              : "Nenhum QR Code encontrado."}
+          </p>
+          {!searchQuery && (
+            <Link href="/admin/qrcodes/new" className="text-green-500 hover:underline text-sm mt-1 inline-block">
+              Criar o primeiro QR Code
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-2">

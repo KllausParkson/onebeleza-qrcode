@@ -33,15 +33,6 @@ export default function AdminSidebar() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="px-3 py-3">
-        <input
-          type="text"
-          placeholder="Buscar QR Codes..."
-          className="w-full text-xs bg-white/10 text-white placeholder:text-white/40 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-green-400"
-        />
-      </div>
-
       {/* Nav */}
       <nav className="flex-1 px-2 space-y-0.5">
         {navItems.map((item) => {

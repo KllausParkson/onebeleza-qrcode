@@ -74,7 +74,10 @@ app.get("/", async (c) => {
 
   if (type) query = query.eq("type", type);
   if (folder_id) query = query.eq("folder_id", folder_id);
-  if (search) query = query.ilike("name", `%${search}%`);
+  if (search) {
+    const term = search.replace(/[%_\\]/g, "\\$&");
+    query = query.or(`name.ilike.%${term}%,slug.ilike.%${term}%`);
+  }
 
   const { data, error, count } = await query;
   if (error) return c.json({ error: error.message }, 500);
