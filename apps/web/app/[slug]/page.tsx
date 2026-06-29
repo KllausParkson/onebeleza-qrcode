@@ -1,25 +1,14 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import type { QrCode } from "@onebeleza/shared";
+import { headers } from "next/headers";
 import WelcomeScreen from "@/components/qrcode/WelcomeScreen";
-import { getWelcomeScreen, normalizeQrCode } from "@/lib/qrcode-form";
+import { getWelcomeScreen } from "@/lib/qrcode-form";
+import {
+  getPublicQrCodeBySlug,
+  recordQrCodeScan,
+} from "@/lib/public-qrcode";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:3001";
-
-async function getQrCode(slug: string): Promise<QrCode | null> {
-  try {
-    const res = await fetch(`${API_URL}/public/${slug}`, {
-      next: { revalidate: 60 },
-    });
-    if (!res.ok) return null;
-    const raw = (await res.json()) as QrCode;
-    return normalizeQrCode(raw);
-  } catch {
-    return null;
-  }
-}
+export const revalidate = 60;
 
 export async function generateMetadata({
   params,
@@ -27,7 +16,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const qr = await getQrCode(slug);
+  const qr = await getPublicQrCodeBySlug(slug);
   if (!qr) return { title: "Não encontrado" };
 
   const ws = getWelcomeScreen(qr);
@@ -48,8 +37,11 @@ export default async function SlugPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const qr = await getQrCode(slug);
+  const qr = await getPublicQrCodeBySlug(slug);
   if (!qr) notFound();
+
+  const headersList = await headers();
+  recordQrCodeScan(qr.id, headersList.get("user-agent") ?? "");
 
   return <WelcomeScreen qrCode={qr} />;
 }
